@@ -6,42 +6,19 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
-
-#define SOCKET_NAME "/tmp/tidyd.socket"
-#define BUFFER_SIZE 16
+#include "common/TidyDescriptor.hpp"
+#include "common/definitions.hpp"
 
 int main(int argc, char* argv[])
 {
-    struct sockaddr_un socket_data;
     std::string response_data = "pong";
     int data_socket;
-    char buffer[BUFFER_SIZE];
+    char buffer[DAEMON_BUFFER_SIZE];
     bool read_flag = false;
+    TidyDescriptor tidy_daemon = TidyDescriptor::listen_on();
+    int* fd = tidy_daemon.get();
 
-    int fd = socket(AF_LOCAL, SOCK_STREAM, 0);
-    if(fd < 0)
-    {
-        std::cout << "Couldn't create socket !" << std::endl;
-        return -1;
-    }else {
-        std::cout << "Socket created successfully!" << std::endl;
-    }
-
-    memset(&socket_data, 0, sizeof(socket_data));
-    socket_data.sun_family = AF_LOCAL;
-    strncpy(socket_data.sun_path, SOCKET_NAME, sizeof(socket_data.sun_path) - 1);
-    unlink(SOCKET_NAME);
-
-    int ret = bind(fd, reinterpret_cast<const struct sockaddr*>(&socket_data), sizeof(socket_data));
-
-    if (ret == -1) {
-        std::cout << "Error while binding socket!" << std::endl;
-        return -1;
-    }else {
-        std::cout << "Socket binding - SUCCESS !" << std::endl;
-    }
-
-    int lis_ret = listen(fd, 20);
+    int lis_ret = listen(*fd, 20);
     if (lis_ret == -1){
         std::cout << "Can't listen on socket!" << std::endl;
         return -1;
@@ -49,17 +26,17 @@ int main(int argc, char* argv[])
 
     for(;;)
     {
-        data_socket = accept(fd, NULL, NULL);
-        if (data_socket == -1) {
-            perror("accept");
-            exit(EXIT_FAILURE);
+        TidyDescriptor conn{accept(*fd, NULL, NULL)};
+        if (*conn.get() < 0) {
+            perror("Couln't accept socket data");
+            return -1;
         }else {
             std::cout << "SUCCESS: Socket accepted" << std::endl;
         }
 
         for(;;)
         {
-            ssize_t bytes_read = read(data_socket, buffer, sizeof(buffer) - 1);
+            ssize_t bytes_read = read(*conn.get(), buffer, sizeof(buffer) - 1);
             if(bytes_read < 0)
             {
                 perror("ERROR: Couldn't read the buffer");
@@ -90,9 +67,10 @@ int main(int argc, char* argv[])
 
             std::cout << buffer << std::endl;
 
-            write(data_socket, response_data.data(), response_data.size());
+            write(*conn.get(), response_data.data(), response_data.size());
         }
 
+        close(data_socket);
         if(read_flag)
         {
             std::cout << "Closing connection\n";
@@ -100,6 +78,5 @@ int main(int argc, char* argv[])
         }
     }
 
-    close(fd);
     return 0;
 }

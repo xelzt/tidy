@@ -1,3 +1,4 @@
+#include "common/TidyDescriptor.hpp"
 #include <cstddef>
 #include <cstdio>
 #include <cstring>
@@ -9,9 +10,6 @@
 #include <sys/un.h>
 #include <unistd.h>
 #include <unordered_map>
-
-#define SOCKET_NAME "/tmp/tidyd.socket"
-#define BUFFER_SIZE 256
 
 #define HELP_MODE 0
 #define STATUS_MODE 1
@@ -50,7 +48,7 @@ int handle_operation(int fd, int mode)
             break;
     }
 
-    char buffer[BUFFER_SIZE];
+    char buffer[CLIENT_BUFFER_SIZE];
     if(write(fd, send_data.data(), send_data.size()) == -1)
     {
         perror("ERROR: Couldn't send data");
@@ -81,37 +79,10 @@ int handle_help()
     return 0;
 }
 
-void setup(int* fd, struct sockaddr_un* socket_data)
-{
-    *fd = socket(AF_LOCAL, SOCK_STREAM, 0);
-    if(*fd < 0)
-    {
-        std::cout << "Couldn't create socket !" << std::endl;
-    }
-    else
-    {
-        std::cout << "Socket created successfully!" << std::endl;
-    }
-
-    socket_data->sun_family = AF_LOCAL;
-    strncpy(socket_data->sun_path, SOCKET_NAME, sizeof(socket_data->sun_path) - 1);
-
-    if (connect(*fd, reinterpret_cast<sockaddr*>(socket_data), sizeof(*socket_data))) {
-        std::cout << "Error while connecting to socket!" << std::endl;
-    }else {
-        std::cout << "Connection to socket established - SUCCESS !" << std::endl;
-    }
-}
-
-void teardown(int* fd)
-{
-    close(*fd);
-}
-
 int main(int argc, char* argv[])
 {
-    int fd;
-    struct sockaddr_un socket_data;
+    TidyDescriptor td = TidyDescriptor::connect_to();
+    int* fd = td.get();
 
     int mode = argc > 1 ? map_args_to_mode(static_cast<std::string>(argv[1])) : DEFAULT_MODE;
     switch (mode) {
@@ -119,14 +90,10 @@ int main(int argc, char* argv[])
             handle_help();
             break;
         case PING_MODE:
-            setup(&fd, &socket_data);
-            handle_operation(fd, mode);
-            teardown(&fd);
+            handle_operation(*fd, mode);
             break;
         case STATUS_MODE:
-            setup(&fd, &socket_data);
-            handle_operation(fd, mode);
-            teardown(&fd);
+            handle_operation(*fd, mode);
             break;
         default:
             break;
