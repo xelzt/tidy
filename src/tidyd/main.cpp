@@ -2,6 +2,7 @@
 #include <cstdio>
 #include <cstring>
 #include <iostream>
+#include <string>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
@@ -65,12 +66,26 @@ int main(int argc, char* argv[])
                 break;
             }
 
+            if(bytes_read == 0)
+            {
+                break;
+            }
+
             buffer[bytes_read] = '\0';
 
             if(strncmp(buffer, "END", 3) == 0)
             {
                 read_flag = true;
                 break;
+            }
+
+            if(strncmp(buffer, "ping", 4) == 0)
+            {
+                response_data = "pong";
+            }
+            else if (strncmp(buffer, "status", 6) == 0) {
+                int pid = getpid();
+                response_data = "PID: " + std::to_string(pid);
             }
 
             std::cout << buffer << std::endl;
@@ -80,6 +95,7 @@ int main(int argc, char* argv[])
 
         if(read_flag)
         {
+            std::cout << "Closing connection\n";
             break;
         }
     }
