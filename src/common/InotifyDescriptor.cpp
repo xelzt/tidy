@@ -5,10 +5,7 @@
 
 InotifyDescriptor::~InotifyDescriptor()
 {
-    if (fd >= 0) {
-        ::close(this->fd);
-        fd = -1;
-    }
+    this->close();
 }
 
 InotifyDescriptor InotifyDescriptor::init(int flags)
@@ -19,4 +16,12 @@ InotifyDescriptor InotifyDescriptor::init(int flags)
 int* InotifyDescriptor::get()
 {
     return &this->fd;
+}
+
+void InotifyDescriptor::close()
+{
+    if (fd > 0) {
+        ::close(fd);
+        fd = -1;
+    }
 }

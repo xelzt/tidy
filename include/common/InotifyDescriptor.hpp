@@ -37,4 +37,5 @@ public:
 
     static InotifyDescriptor init(int flags);
     int* get();
+    void close();
 };

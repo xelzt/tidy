@@ -1,6 +1,7 @@
 #include <cstddef>
 #include <cstdio>
 #include <cstring>
+#include <functional>
 #include <iostream>
 #include <mutex>
 #include <queue>
@@ -16,39 +17,21 @@
 #include <condition_variable>
 #include <fcntl.h>
 #include <sys/inotify.h>
-enum class Op
-{
-    Stop,
-    Tidy,
-    NewFile
-};
-
-struct Job
-{
-    Op op;
-    std::string path;
-};
-
-struct
-{
-    std::queue<Job> jobQueue;
-    std::condition_variable cv;
-    std::mutex operationMutex;
-}tidyDaemonThread;
+#include "tidyd/DaemonContext.hpp"
 
 void runTidyMode()
 {
     std::cout << "Tidy inside Tidy Daemon\n";
 }
 
-void runTidyWorker()
+void runTidyWorker(DaemonContext& context)
 {
     while (true) {
-        std::unique_lock<std::mutex> lock(tidyDaemonThread.operationMutex);
-        tidyDaemonThread.cv.wait(lock, [&] {return !tidyDaemonThread.jobQueue.empty();});
+        std::unique_lock<std::mutex> lock(context.operationMutex);
+        context.cv.wait(lock, [&] {return !context.jobQueue.empty();});
 
-        Job job = tidyDaemonThread.jobQueue.front();
-        tidyDaemonThread.jobQueue.pop();
+        Job job = context.jobQueue.front();
+        context.jobQueue.pop();
         lock.unlock();
 
         if(job.op == Op::Tidy)
@@ -63,12 +46,11 @@ void runTidyWorker()
     }
 }
 
-void runIpcWatcher()
+void runIpcWatcher(DaemonContext& context)
 {
     std::string response_data = "pong";
     char buffer[DAEMON_BUFFER_SIZE];
-    TidyDescriptor tidy_daemon = TidyDescriptor::listen_on();
-    int* fd = tidy_daemon.get();
+    int* fd = context.socketFd.get();
 
     int lis_ret = listen(*fd, 20);
     if (lis_ret == -1){
@@ -101,14 +83,17 @@ void runIpcWatcher()
             buffer[bytes_read] = '\0';
             std::string_view cmd(buffer);
 
-            if(cmd == "END")
+            if(cmd == "end")
             {
                 {
-                    std::lock_guard<std::mutex> lock(tidyDaemonThread.operationMutex);
+                    std::lock_guard<std::mutex> lock(context.operationMutex);
                     Job stopJob = Job{Op::Stop};
-                    tidyDaemonThread.jobQueue.push(stopJob);
+                    context.jobQueue.push(stopJob);
+                    context.inotifyFd.close();
+                    response_data = "Daemon disabled";
                 }
-                tidyDaemonThread.cv.notify_one();
+                context.cv.notify_all();
+                
                 return;
             }
             else if(cmd == "ping")
@@ -122,11 +107,11 @@ void runIpcWatcher()
             else if (cmd == "tidy") {
                 {
                     response_data = "tidy";
-                    std::lock_guard<std::mutex> lock(tidyDaemonThread.operationMutex);
+                    std::lock_guard<std::mutex> lock(context.operationMutex);
                     Job tidyJob = Job{Op::Tidy};
-                    tidyDaemonThread.jobQueue.push(tidyJob);
+                    context.jobQueue.push(tidyJob);
                 }
-                tidyDaemonThread.cv.notify_one();
+                context.cv.notify_one();
             }
 
             std::cout << buffer << std::endl;
@@ -136,12 +121,11 @@ void runIpcWatcher()
     }
 }
 
-void runDirectoryWatcher()
+void runDirectoryWatcher(DaemonContext& context)
 {
     int* descriptorPtr = nullptr;
     alignas(inotify_event) char buffer[WATCHER_BUFFER_SIZER];
-    InotifyDescriptor inotifyWatcher = InotifyDescriptor::init(IN_CLOEXEC);
-    descriptorPtr = inotifyWatcher.get();
+    descriptorPtr = context.inotifyFd.get();
 
     int wd = inotify_add_watch(*descriptorPtr, DIRECTORY_WATCHER_PATH, IN_CREATE | IN_MOVED_TO);
     if (wd < 0) {
@@ -162,11 +146,11 @@ void runDirectoryWatcher()
             if (iEvent->len > 0) {
                 std::cout << "Name: " << iEvent->name << " mask: " << iEvent->mask << "\n";
                 {
-                    std::lock_guard<std::mutex> lock(tidyDaemonThread.operationMutex);
+                    std::lock_guard<std::mutex> lock(context.operationMutex);
                     Job newFileJob{Op::NewFile, iEvent->name};
-                    tidyDaemonThread.jobQueue.push(newFileJob);
+                    context.jobQueue.push(newFileJob);
                 }
-                tidyDaemonThread.cv.notify_one();
+                context.cv.notify_one();
             }
 
             p += sizeof(struct inotify_event) + iEvent->len;
@@ -177,9 +161,13 @@ void runDirectoryWatcher()
 
 int main(int argc, char* argv[])
 {
-    std::jthread tidyWorker(runTidyWorker);
-    std::jthread tidyWatcher(runIpcWatcher);
-    std::jthread tidyDirectoryWatcher(runDirectoryWatcher);
+    DaemonContext tidyDaemon;
+    tidyDaemon.inotifyFd = InotifyDescriptor::init(IN_CLOEXEC);
+    tidyDaemon.socketFd = TidyDescriptor::listen_on();
+
+    std::jthread tidyWorker(runTidyWorker, std::ref(tidyDaemon));
+    std::jthread tidyWatcher(runIpcWatcher, std::ref(tidyDaemon));
+    std::jthread tidyDirectoryWatcher(runDirectoryWatcher, std::ref(tidyDaemon));
 
     return 0;
 }

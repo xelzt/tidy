@@ -51,7 +51,7 @@ int handle_operation(int fd, int mode)
             send_data = "tidy";
             break;
         case END_MODE:
-            send_data = "END";
+            send_data = "end";
             break;
         default:
             send_data = "ping";
