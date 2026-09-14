@@ -14,12 +14,16 @@
 #define HELP_MODE 0
 #define STATUS_MODE 1
 #define PING_MODE 2
-#define DEFAULT_MODE 3
+#define TIDY_MODE 3
+#define END_MODE 4
+#define DEFAULT_MODE 5
 
 std::unordered_map<std::string, int> modes = {
     {"help", 0},
     {"status", 1},
     {"ping", 2},
+    {"tidy", 3},
+    {"end", 4},
     {"default", DEFAULT_MODE},
 };
 
@@ -42,6 +46,12 @@ int handle_operation(int fd, int mode)
             break;
         case STATUS_MODE:
             send_data = "status";
+            break;
+        case TIDY_MODE:
+            send_data = "tidy";
+            break;
+        case END_MODE:
+            send_data = "END";
             break;
         default:
             send_data = "ping";
@@ -90,9 +100,9 @@ int main(int argc, char* argv[])
             handle_help();
             break;
         case PING_MODE:
-            handle_operation(*fd, mode);
-            break;
         case STATUS_MODE:
+        case TIDY_MODE:
+        case END_MODE:
             handle_operation(*fd, mode);
             break;
         default:
