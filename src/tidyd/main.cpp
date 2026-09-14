@@ -5,6 +5,7 @@
 #include <mutex>
 #include <queue>
 #include <string>
+#include <string_view>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <thread>
@@ -87,8 +88,9 @@ void runIpcWatcher()
             }
 
             buffer[bytes_read] = '\0';
+            std::string_view cmd(buffer);
 
-            if(strncmp(buffer, "END", 3) == 0)
+            if(cmd == "END")
             {
                 {
                     std::lock_guard<std::mutex> lock(tidyDaemonThread.operationMutex);
@@ -97,16 +99,15 @@ void runIpcWatcher()
                 tidyDaemonThread.cv.notify_one();
                 return;
             }
-
-            if(strncmp(buffer, "ping", 4) == 0)
+            else if(cmd == "ping")
             {
                 response_data = "pong";
             }
-            else if (strncmp(buffer, "status", 6) == 0) {
+            else if (cmd == "status") {
                 int pid = getpid();
                 response_data = "PID: " + std::to_string(pid);
             }
-            else if (strncmp(buffer, "tidy", 4) == 0) {
+            else if (cmd == "tidy") {
                 {
                     response_data = "tidy";
                     std::lock_guard<std::mutex> lock(tidyDaemonThread.operationMutex);
