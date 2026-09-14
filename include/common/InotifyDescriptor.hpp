@@ -10,7 +10,7 @@ private:
 
 public:
     InotifyDescriptor() = default;
-    explicit InotifyDescriptor(int fd);
+    explicit InotifyDescriptor(int fd) : fd(fd) {};
     ~InotifyDescriptor();
 
     InotifyDescriptor(const InotifyDescriptor&) = delete;

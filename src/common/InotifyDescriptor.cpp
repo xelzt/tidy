@@ -2,10 +2,6 @@
 #include <unistd.h>
 #include <sys/inotify.h>
 
-InotifyDescriptor::InotifyDescriptor(int fd)
-{
-    this->fd = fd;
-}
 
 InotifyDescriptor::~InotifyDescriptor()
 {
