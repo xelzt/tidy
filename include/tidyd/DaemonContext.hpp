@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <condition_variable>
 #include <queue>
 #include <string>
@@ -31,6 +32,7 @@ struct DaemonContext
     std::queue<Job> jobQueue;
     std::condition_variable cv;
     std::mutex operationMutex;
+    std::atomic<bool> running{true};
 
     InotifyDescriptor inotifyFd;
     TidyDescriptor socketFd;

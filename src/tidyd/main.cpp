@@ -18,15 +18,21 @@
 #include <condition_variable>
 #include <fcntl.h>
 #include <sys/inotify.h>
+#include <poll.h>
 #include "nlohmann/json_fwd.hpp"
 #include "tidyd/DaemonContext.hpp"
 #include <nlohmann/json.hpp>
 
 using json = nlohmann::json;
 
-void runTidyMode()
+void runTidyMode(std::string filePath)
 {
-    std::cout << "Tidy inside Tidy Daemon\n";
+    std::cout << "File: " << filePath << "\n";
+}
+
+void runNewFileMode(std::string filePath)
+{
+
 }
 
 void runTidyWorker(DaemonContext& context)
@@ -41,12 +47,12 @@ void runTidyWorker(DaemonContext& context)
 
         if(job.op == Op::Tidy)
         {
-            runTidyMode();
+            runTidyMode(job.path);
         }
         else if (job.op == Op::Stop) {
             break;
         }else if (job.op == Op::NewFile) {
-            std::cout << "Moving file: " << job.path << "\n";
+            runNewFileMode(job.path);
         }
     }
 }
@@ -90,15 +96,16 @@ void runIpcWatcher(DaemonContext& context)
 
             if(cmd == "end")
             {
+                response_data = "Daemon disabled";
+                write(*conn.get(), response_data.data(), response_data.size());
+
+                context.running = false;
                 {
                     std::lock_guard<std::mutex> lock(context.operationMutex);
-                    Job stopJob = Job{Op::Stop};
-                    context.jobQueue.push(stopJob);
+                    context.jobQueue.push(Job{Op::Stop});
                     context.inotifyFd.close();
-                    response_data = "Daemon disabled";
                 }
                 context.cv.notify_all();
-                
                 return;
             }
             else if(cmd == "ping")
@@ -128,9 +135,8 @@ void runIpcWatcher(DaemonContext& context)
 
 void runDirectoryWatcher(DaemonContext& context)
 {
-    int* descriptorPtr = nullptr;
     alignas(inotify_event) char buffer[WATCHER_BUFFER_SIZER];
-    descriptorPtr = context.inotifyFd.get();
+    int* descriptorPtr = context.inotifyFd.get();
 
     int wd = inotify_add_watch(*descriptorPtr, DIRECTORY_WATCHER_PATH, IN_CREATE | IN_MOVED_TO);
     if (wd < 0) {
@@ -138,28 +144,42 @@ void runDirectoryWatcher(DaemonContext& context)
         return;
     }
 
-    while (true) {
+    while (context.running.load()) 
+    {
+        pollfd pfd{};
+        pfd.fd = *descriptorPtr;
+        pfd.events = POLLIN;
+
+        int pr = poll(&pfd, 1, 200);
+        if (pr < 0) {
+            std::cout << "Problem occured while polling inotify\n";
+            return;
+        }
+        if (pr == 0) {
+            continue;
+        }
+        if (!context.running.load()) {
+            return;
+        }
+
         int n = read(*descriptorPtr, buffer, WATCHER_BUFFER_SIZER);
         if (n < 0) {
             std::cout << "Problem occured while reading events to buffer\n";
             return;
         }
 
-        for(char* p = buffer; p < buffer + n;)
-        {
+        for (char* p = buffer; p < buffer + n;) {
             auto* iEvent = reinterpret_cast<struct inotify_event*>(p);
             if (iEvent->len > 0) {
                 std::cout << "Name: " << iEvent->name << " mask: " << iEvent->mask << "\n";
                 {
                     std::lock_guard<std::mutex> lock(context.operationMutex);
-                    Job newFileJob{Op::NewFile, iEvent->name};
-                    context.jobQueue.push(newFileJob);
+                    context.jobQueue.push(Job{Op::NewFile, iEvent->name});
                 }
                 context.cv.notify_one();
             }
 
             p += sizeof(struct inotify_event) + iEvent->len;
-            
         }
     }
 }
@@ -176,7 +196,6 @@ int main(int argc, char* argv[])
                 std::cerr << "tidyd: config flag requires path!\n";
                 return 1;
             }
-            std::cout << "Elegancko szef\n";
             config_path = argv[++i];
         }
         else if (argument == "--help") {
