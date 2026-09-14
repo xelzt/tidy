@@ -1,6 +1,7 @@
 #include <cstddef>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <functional>
 #include <iostream>
@@ -24,15 +25,31 @@
 #include <nlohmann/json.hpp>
 
 using json = nlohmann::json;
+namespace fs = std::filesystem;
 
 void runTidyMode(std::string filePath)
 {
     std::cout << "File: " << filePath << "\n";
 }
 
-void runNewFileMode(std::string filePath)
+void runNewFileMode(std::string filePath, DaemonContext& context)
 {
+    fs::path name = filePath;
+    std::string ext = name.extension();
+    
+    for (auto rule : context.rules) {
+        if (ext == rule.pattern) {
+            std::string srcPath = fs::path(DIRECTORY_WATCHER_PATH) / filePath;
+            std::string dstPath = fs::path(rule.path) / filePath;
 
+            fs::create_directories(rule.path);
+            std::filesystem::rename(srcPath, dstPath);
+            std::cout << "Moving: " << srcPath << " to: " << dstPath << "\n";
+            return;
+        }
+    }
+
+    std::cerr << "No rule for " << DIRECTORY_WATCHER_PATH + filePath << " file\n";
 }
 
 void runTidyWorker(DaemonContext& context)
@@ -52,7 +69,7 @@ void runTidyWorker(DaemonContext& context)
         else if (job.op == Op::Stop) {
             break;
         }else if (job.op == Op::NewFile) {
-            runNewFileMode(job.path);
+            runNewFileMode(job.path, context);
         }
     }
 }
