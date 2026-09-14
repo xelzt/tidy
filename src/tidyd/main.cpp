@@ -1,6 +1,7 @@
 #include <cstddef>
 #include <cstdio>
 #include <cstring>
+#include <fstream>
 #include <functional>
 #include <iostream>
 #include <mutex>
@@ -17,7 +18,11 @@
 #include <condition_variable>
 #include <fcntl.h>
 #include <sys/inotify.h>
+#include "nlohmann/json_fwd.hpp"
 #include "tidyd/DaemonContext.hpp"
+#include <nlohmann/json.hpp>
+
+using json = nlohmann::json;
 
 void runTidyMode()
 {
@@ -162,6 +167,35 @@ void runDirectoryWatcher(DaemonContext& context)
 int main(int argc, char* argv[])
 {
     DaemonContext tidyDaemon;
+    std::string config_path;
+    for(int i = 1; i < argc; i++)
+    {
+        std::string argument = argv[i];
+        if (argument == "--config") {
+            if (i + 1 >= argc) {
+                std::cerr << "tidyd: config flag requires path!\n";
+                return 1;
+            }
+            std::cout << "Elegancko szef\n";
+            config_path = argv[++i];
+        }
+        else if (argument == "--help") {
+            std::cout << "--config -> Path to json file with rules\n";
+            return 0;
+        }else {
+            std::cerr << "Incorrect option!\n";
+            return 1;
+        }
+    }
+
+    std::ifstream jsonFile(config_path);
+    json data = json::parse(jsonFile);
+
+    for(auto a : data.items())
+    {
+        tidyDaemon.rules.push_back(Rule{a.key(), a.value()});
+    }
+
     tidyDaemon.inotifyFd = InotifyDescriptor::init(IN_CLOEXEC);
     tidyDaemon.socketFd = TidyDescriptor::listen_on();
 

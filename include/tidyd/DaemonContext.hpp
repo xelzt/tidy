@@ -3,6 +3,7 @@
 #include <condition_variable>
 #include <queue>
 #include <string>
+#include <vector>
 #include "common/InotifyDescriptor.hpp"
 #include "common/TidyDescriptor.hpp"
 
@@ -19,6 +20,12 @@ struct Job
     std::string path;
 };
 
+struct Rule
+{
+    std::string pattern;
+    std::string path;
+};
+
 struct DaemonContext
 {
     std::queue<Job> jobQueue;
@@ -27,4 +34,6 @@ struct DaemonContext
 
     InotifyDescriptor inotifyFd;
     TidyDescriptor socketFd;
+
+    std::vector<Rule> rules;
 };

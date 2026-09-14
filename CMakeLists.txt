@@ -8,6 +8,14 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 add_executable(tidy)
 add_executable(tidyd)
 
+include(FetchContent)
+FetchContent_Declare(
+    nlohmann_json
+    GIT_REPOSITORY https://github.com/nlohmann/json.git
+    GIT_TAG 9cca280a4d0ccf0c08f47a99aa71d1b0e52f8d03 #RELEASE 3.11.3
+)
+
+FetchContent_MakeAvailable(nlohmann_json)
 add_library(TidyDaemon INTERFACE)
 target_include_directories(TidyDaemon INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
@@ -26,4 +34,4 @@ PRIVATE
 ${CMAKE_CURRENT_SOURCE_DIR}/src/tidyd/main.cpp)   
 
 target_link_libraries(tidy PRIVATE TidyCommon)
-target_link_libraries(tidyd PRIVATE TidyCommon TidyDaemon)
+target_link_libraries(tidyd PRIVATE TidyCommon TidyDaemon nlohmann_json::nlohmann_json)
