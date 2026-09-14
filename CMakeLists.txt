@@ -8,7 +8,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 add_executable(tidy)
 add_executable(tidyd)
 
-add_library(TidyCommon STATIC src/common/TidyDescriptor.cpp)
+add_library(TidyCommon STATIC src/common/TidyDescriptor.cpp
+                              src/common/InotifyDescriptor.cpp)
 target_include_directories(TidyCommon PUBLIC 
                                           ${CMAKE_CURRENT_SOURCE_DIR}/include)
 

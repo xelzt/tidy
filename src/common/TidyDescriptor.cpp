@@ -10,7 +10,7 @@ TidyDescriptor::TidyDescriptor(int fd)
 
 TidyDescriptor::~TidyDescriptor()
 {
-    if(fd > 0)
+    if(fd >= 0)
     {
         ::close(this->fd);
         this->fd = -1;
